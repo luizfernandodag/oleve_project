@@ -5,3 +5,22 @@ backend/__pycache__/
 # Frontend
 frontend/node_modules/
 frontend/build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Node
+node_modules/
+dist/
+.vite
+
+# Docker
+*.env
+*.pem
+
+# Editor
+.vscode/
+.idea/
