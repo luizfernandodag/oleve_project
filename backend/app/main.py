@@ -1,9 +1,21 @@
 from fastapi import FastAPI
-from app.routes import setup_routes
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
+from app.routes import prompts, sessions, pins
 
 app = FastAPI()
-setup_routes(app)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.FRONTEND_ORIGIN, "*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+app.include_router(prompts, prefix="/prompts", tags=["prompts"])
+app.include_router(sessions, prefix="/sessions", tags=["sessions"])
+app.include_router(pins, prefix="/pins", tags=["pins"])
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
