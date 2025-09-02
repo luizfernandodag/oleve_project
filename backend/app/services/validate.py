@@ -7,7 +7,7 @@ from openai import OpenAI
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = (
-    "You score how well an image matches an interior design prompt. "
+    "You score how well an image matches the given prompt. "
     "Return JSON with 'match_score' (0..1) and 'explanation'."
 )
 

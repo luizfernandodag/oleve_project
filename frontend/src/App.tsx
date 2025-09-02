@@ -1,107 +1,159 @@
-import { useState } from "react";
-import { validatePins } from "./api";
+// src/App.tsx
+import { useEffect, useState } from "react";
 
 type Pin = {
+  pin_url: string;
   image_url: string;
   title: string;
-  pin_url: string;
   description: string;
   match_score: number;
   status: "approved" | "disqualified";
   ai_explanation: string;
 };
 
+type PromptHistoryEntry = {
+  prompt: string;
+  pins: Pin[];
+};
+
+const LOCAL_STORAGE_KEY = "prompt_history";
+
 export default function App() {
   const [prompt, setPrompt] = useState("");
   const [pins, setPins] = useState<Pin[]>([]);
+  const [history, setHistory] = useState<PromptHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<"all" | "approved" | "disqualified">("all");
+  const [minScore, setMinScore] = useState(0.5);
 
-  const handleStart = () => {
-    if (!prompt) return;
-    setLoading(true);
-    setPins([]);
+  // Load history from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (stored) setHistory(JSON.parse(stored));
+  }, []);
 
-    // Chamada "síncrona" usando then/catch
-    validatePins(prompt)
-      .then(data => {
-        if (data.status === "success") {
-          setPins(data.pins);
-        } else {
-          alert("Erro ao validar pins: " + (data.message || "desconhecido"));
-        }
-      })
-      .catch(err => {
-        console.error("Erro ao validar pins:", err);
-        alert("Erro ao validar pins. Veja o console.");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+  // Save history to localStorage
+  const saveHistory = (newEntry: PromptHistoryEntry) => {
+    const newHistory = [newEntry, ...history];
+    setHistory(newHistory);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newHistory));
   };
 
-  const filteredPins = pins.filter(pin => filter === "all" || pin.status === filter);
+  const handleSubmit = async () => {
+    if (!prompt) return;
+    setLoading(true);
+    try {
+      const res = await fetch("http://127.0.0.1:8080/prompts/scrape-validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      const validatedPins: Pin[] = data.pins || [];
+      setPins(validatedPins);
+      saveHistory({ prompt, pins: validatedPins });
+    } catch (err: any) {
+      console.error("Fetch error:", err);
+      setPins([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter pins by minimum score
+  const filteredPins = pins.filter((pin) => pin.match_score >= minScore);
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-4">Oleve Prompts</h1>
+      <h1 className="text-2xl font-bold mb-4">Pinterest AI Scraper</h1>
 
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex gap-2">
         <input
           type="text"
-          placeholder="Digite seu prompt visual"
           value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          className="border p-2 flex-1 rounded"
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Enter your visual prompt..."
+          className="border p-2 flex-1"
         />
         <button
-          onClick={handleStart}
-          className="bg-blue-600 text-white px-4 rounded hover:bg-blue-700"
+          onClick={handleSubmit}
+          className="bg-blue-500 text-white px-4 py-2 rounded"
           disabled={loading}
         >
-          {loading ? "Processando..." : "Iniciar Prompt"}
+          {loading ? "Loading..." : "Start Agent"}
         </button>
       </div>
 
-      {pins.length > 0 && (
-        <>
-          <div className="mb-4 flex gap-2">
+      <div className="mb-4">
+        <label>Min Match Score: {minScore}</label>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={minScore}
+          onChange={(e) => setMinScore(parseFloat(e.target.value))}
+          className="w-full"
+        />
+      </div>
+
+      {filteredPins.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+          {filteredPins.map((pin) => (
+            <div key={pin.pin_url} className="border p-2 rounded">
+              <img
+                src={pin.image_url}
+                alt={pin.title}
+                className="w-full h-48 object-cover mb-2"
+              />
+              <h3 className="font-semibold">{pin.title}</h3>
+              <p className="text-sm mb-1">{pin.description}</p>
+              <p>
+                Score: {pin.match_score.toFixed(2)} - {pin.status === "approved" ? "✅" : "❌"}
+              </p>
+              <p className="text-xs italic">{pin.ai_explanation}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <div className="mt-8">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-xl font-bold">Prompt History</h2>
             <button
-              className={`px-3 py-1 rounded border ${filter === "all" ? "bg-blue-200" : ""}`}
-              onClick={() => setFilter("all")}
+              onClick={() => {
+                if (confirm("Are you sure you want to clear history?")) {
+                  setHistory([]);
+                  localStorage.removeItem(LOCAL_STORAGE_KEY);
+                }
+              }}
+              className="bg-red-500 text-white px-3 py-1 rounded text-sm"
             >
-              All
-            </button>
-            <button
-              className={`px-3 py-1 rounded border ${filter === "approved" ? "bg-green-200" : ""}`}
-              onClick={() => setFilter("approved")}
-            >
-              Approved
-            </button>
-            <button
-              className={`px-3 py-1 rounded border ${filter === "disqualified" ? "bg-red-200" : ""}`}
-              onClick={() => setFilter("disqualified")}
-            >
-              Disqualified
+              Clear History
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {filteredPins.map((pin, idx) => (
-              <div key={idx} className="border rounded p-2 shadow">
-                <a href={pin.pin_url} target="_blank" rel="noopener noreferrer">
-                  <img src={pin.image_url} alt={pin.title} className="w-full h-48 object-cover rounded mb-2" />
-                </a>
-                <h2 className="font-semibold">{pin.title}</h2>
-                <p className="text-sm text-gray-600 mb-1">{pin.description}</p>
-                <p className="text-sm">
-                  Score: {pin.match_score.toFixed(2)} - {pin.status === "approved" ? "✅" : "❌"}
-                </p>
-                {pin.ai_explanation && <p className="text-xs text-gray-500 mt-1">{pin.ai_explanation}</p>}
+          {history.map((entry, idx) => (
+            <div key={idx} className="mb-4 border p-2 rounded">
+              <h3 className="font-semibold">{entry.prompt}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
+                {entry.pins.map((pin) => (
+                  <div key={pin.pin_url} className="border p-1 rounded text-xs">
+                    <img
+                      src={pin.image_url}
+                      alt={pin.title}
+                      className="w-full h-24 object-cover rounded mb-1"
+                    />
+                    <p>Score: {pin.match_score.toFixed(2)}</p>
+                    <p>Status: {pin.status === "approved" ? "✅" : "❌"}</p>
+                    <p className="italic">{pin.ai_explanation}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
