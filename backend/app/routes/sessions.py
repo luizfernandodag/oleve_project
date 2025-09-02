@@ -1,15 +1,19 @@
-from fastapi import APIRouter, HTTPException
 from app.db import db
+from app.utils import serialize_mongo
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 @router.get("/{prompt_id}")
-def get_sessions(prompt_id: str):
-    sessions_collection = db["sessions"]
+async def get_sessions(prompt_id: str):
+    try:
+        oid = ObjectId(prompt_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid prompt_id format")
 
-    sessions = list(sessions_collection.find({"prompt_id": prompt_id}, {"_id": 0}))
-
+    sessions = await db.sessions.find({"prompt_id": oid}).to_list(length=None)
     if not sessions:
         raise HTTPException(status_code=404, detail=f"No sessions found for prompt_id={prompt_id}")
 
-    return {"sessions": sessions}
+    return serialize_mongo(sessions)
